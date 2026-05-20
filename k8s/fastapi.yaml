@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: fastapi-saml
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-idp-metadata
+  namespace: fastapi-saml
+data:
+  idp_metadata.xml: |
+    <!-- Placeholder: replaced by setup_keycloak.sh after Keycloak is configured -->
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fastapi-config
+  namespace: fastapi-saml
+data:
+  SP_ENTITY_ID: "http://localhost:8000/metadata"
+  SP_ACS_URL: "http://localhost:8000/acs"
+  SP_SLS_URL: "http://localhost:8000/sls"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fastapi-saml
+  namespace: fastapi-saml
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fastapi-saml
+  template:
+    metadata:
+      labels:
+        app: fastapi-saml
+    spec:
+      containers:
+        - name: fastapi-saml
+          image: localhost/fastapi-saml:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: fastapi-config
+          volumeMounts:
+            - name: idp-metadata
+              mountPath: /app/saml/idp_metadata.xml
+              subPath: idp_metadata.xml
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "250m"
+      volumes:
+        - name: idp-metadata
+          configMap:
+            name: keycloak-idp-metadata
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fastapi-saml
+  namespace: fastapi-saml
+spec:
+  selector:
+    app: fastapi-saml
+  ports:
+    - port: 8000
+      targetPort: 8000

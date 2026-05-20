@@ -1,0 +1,4 @@
+<!-- Placeholder: this file is replaced by setup_keycloak.sh
+     which downloads the real IDP metadata from:
+     http://localhost:8080/realms/saml-demo/protocol/saml/descriptor
+     and mounts it via the keycloak-idp-metadata ConfigMap. -->

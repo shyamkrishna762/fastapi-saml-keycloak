@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}FastAPI SAML SSO{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f5f7fa; color: #1a202c; min-height: 100vh; }
+    nav { background: #2d3748; padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 56px; }
+    nav .brand { color: #63b3ed; font-weight: 700; font-size: 1.1rem; text-decoration: none; }
+    nav a { color: #e2e8f0; text-decoration: none; margin-left: 1.5rem; font-size: 0.9rem; }
+    nav a:hover { color: #63b3ed; }
+    .container { max-width: 860px; margin: 3rem auto; padding: 0 1.5rem; }
+    .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.1), 0 4px 16px rgba(0,0,0,.05); padding: 2.5rem; }
+    h1 { font-size: 1.75rem; font-weight: 700; color: #2d3748; margin-bottom: .5rem; }
+    h2 { font-size: 1.25rem; font-weight: 600; color: #4a5568; margin-bottom: 1rem; }
+    p { color: #718096; line-height: 1.6; margin-bottom: 1rem; }
+    .btn { display: inline-block; padding: .6rem 1.4rem; border-radius: 6px; font-size: .9rem; font-weight: 600; text-decoration: none; cursor: pointer; border: none; }
+    .btn-primary { background: #3182ce; color: #fff; }
+    .btn-primary:hover { background: #2b6cb0; }
+    .btn-danger { background: #e53e3e; color: #fff; }
+    .btn-danger:hover { background: #c53030; }
+    .badge { display: inline-block; background: #ebf8ff; color: #2b6cb0; border-radius: 4px; padding: .2rem .6rem; font-size: .8rem; font-weight: 600; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    th { background: #edf2f7; text-align: left; padding: .6rem 1rem; font-size: .8rem; color: #4a5568; text-transform: uppercase; letter-spacing: .05em; }
+    td { padding: .65rem 1rem; border-bottom: 1px solid #e2e8f0; font-size: .9rem; word-break: break-all; }
+    tr:last-child td { border-bottom: none; }
+    .mt-2 { margin-top: .5rem; }
+    .mt-4 { margin-top: 1rem; }
+    .flex { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="brand" href="/">&#9679; SAML SSO Demo</a>
+    <div>
+      {% if user %}
+        <span style="color:#a0aec0;font-size:.85rem;">{{ user }}</span>
+        <a href="/logout" class="btn btn-danger" style="padding:.35rem .9rem;font-size:.8rem;margin-left:1rem;">Logout</a>
+      {% else %}
+        <a href="/login">Login</a>
+        <a href="/metadata" target="_blank">SP Metadata</a>
+      {% endif %}
+    </div>
+  </nav>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+</body>
+</html>

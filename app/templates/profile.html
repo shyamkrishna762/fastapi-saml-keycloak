@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set user = nameid %}
+{% block title %}Profile — SAML SSO Demo{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>User Profile</h1>
+  <p>Authenticated via Keycloak SAML. Session attributes returned in the SAML assertion are shown below.</p>
+
+  <h2 class="mt-4">Identity</h2>
+  <table>
+    <tr><th>Field</th><th>Value</th></tr>
+    <tr><td>Name ID</td><td><span class="badge">{{ nameid }}</span></td></tr>
+  </table>
+
+  {% if attributes %}
+  <h2 class="mt-4">SAML Attributes</h2>
+  <table>
+    <thead><tr><th>Attribute</th><th>Value(s)</th></tr></thead>
+    <tbody>
+      {% for key, values in attributes.items() %}
+      <tr>
+        <td>{{ key }}</td>
+        <td>{{ values | join(", ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="mt-4" style="color:#a0aec0;font-style:italic;">No additional attributes were returned in the SAML assertion. Add attribute mappers in Keycloak to include email, roles, etc.</p>
+  {% endif %}
+
+  <div class="flex mt-4">
+    <a href="/" class="btn" style="background:#edf2f7;color:#4a5568;">Home</a>
+    <a href="/logout" class="btn btn-danger">Logout</a>
+  </div>
+</div>
+{% endblock %}

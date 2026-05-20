@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Home — SAML SSO Demo{% endblock %}
+{% block content %}
+<div class="card">
+  {% if user %}
+    <h1>Welcome back!</h1>
+    <p>You are logged in as <span class="badge">{{ user }}</span> via Keycloak SAML.</p>
+    <div class="flex mt-4">
+      <a href="/profile" class="btn btn-primary">View Profile &amp; Attributes</a>
+      <a href="/logout" class="btn btn-danger">Logout</a>
+    </div>
+  {% else %}
+    <h1>FastAPI + Keycloak SAML SSO</h1>
+    <p>This application demonstrates SAML 2.0 single sign-on using Keycloak as the Identity Provider and FastAPI as the Service Provider.</p>
+    <p>Click <strong>Login with Keycloak</strong> to begin. You will be redirected to Keycloak, authenticated, and returned here with your session.</p>
+    <div class="flex mt-4">
+      <a href="/login" class="btn btn-primary">Login with Keycloak</a>
+      <a href="/metadata" target="_blank" class="btn" style="background:#edf2f7;color:#4a5568;">View SP Metadata XML</a>
+    </div>
+    <div style="margin-top:2rem;padding:1.5rem;background:#fffaf0;border-radius:8px;border-left:4px solid #ed8936;">
+      <h2 style="color:#c05621;margin-bottom:.5rem;">Setup checklist</h2>
+      <ol style="color:#744210;line-height:2;padding-left:1.2rem;font-size:.9rem;">
+        <li>Keycloak deployed and port-forwarded to <code>localhost:8080</code></li>
+        <li><code>setup_keycloak.sh</code> executed — realm + client registered from SP metadata</li>
+        <li>IDP metadata downloaded and mounted into the pod</li>
+        <li>FastAPI pod restarted — ready to authenticate!</li>
+      </ol>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}
