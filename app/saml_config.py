@@ -99,7 +99,7 @@ def _security_settings() -> dict:
         "logoutResponseSigned": False,
         "signMetadata": False,
         "wantMessagesSigned": False,
-        "wantAssertionsSigned": False,
+        "wantAssertionsSigned": True,   # validate IdP signature using cert from idp_metadata.xml
         "wantNameIdEncrypted": False,
         "wantAssertionsEncrypted": False,
     }
