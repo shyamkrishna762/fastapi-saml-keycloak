@@ -95,10 +95,13 @@ CODE=$(curl -s -o /dev/null -w "%{http_code}" \
 [ "$CODE" = "409" ] && warn "Test user already exists." || \
   warn "Create user returned HTTP $CODE."
 
-# ── 7b. Disable client-signature requirement ─────────────────────────────────
-# client-description-converter sets saml.client.signature=true when the SP
-# metadata contains a signing cert. Since we send unsigned AuthnRequests, we
-# must turn this off or Keycloak returns "Invalid requester".
+# ── 7b. Configure client security attributes for no-signing mode ─────────────
+# - saml.client.signature=false : SP sends unsigned AuthnRequests
+# - saml.assertion.signature=true: Keycloak signs assertions (verified by SP
+#   using the IdP cert from idp_metadata.xml — no SP cert involved)
+# - saml.server.signature=true  : Keycloak signs the Response envelope too
+# - saml.encrypt=false          : no NameID / assertion encryption (no SP cert needed)
+# Clear any SP signing/encryption certificates left from other configurations.
 CLIENT_UUID=$(curl -sf \
   "$KEYCLOAK_URL/admin/realms/$REALM/clients?clientId=http://localhost:8000/metadata" \
   -H "Authorization: Bearer $TOKEN" \
@@ -107,11 +110,19 @@ CLIENT_UUID=$(curl -sf \
 if [ -n "$CLIENT_UUID" ]; then
   curl -sf -X PUT "$KEYCLOAK_URL/admin/realms/$REALM/clients/$CLIENT_UUID" \
     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-    -d '{"attributes":{"saml.client.signature":"false","saml.server.signature":"true"}}' \
-    >/dev/null
-  info "Disabled client-signature requirement on SAML client."
+    -d '{
+      "attributes": {
+        "saml.client.signature":     "false",
+        "saml.assertion.signature":  "true",
+        "saml.server.signature":     "true",
+        "saml.encrypt":              "false",
+        "saml.signing.certificate":  "",
+        "saml.encryption.certificate": ""
+      }
+    }' >/dev/null
+  info "Client security configured: no client signature, assertion signing enabled, no encryption."
 else
-  warn "Could not find client UUID to patch — skipping signature patch."
+  warn "Could not find client UUID to patch — skipping security patch."
 fi
 
 # Fix role_list mapper to emit a single <Attribute> with multiple values instead
