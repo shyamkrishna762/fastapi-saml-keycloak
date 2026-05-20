@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # setup_keycloak.sh
-# Full end-to-end Keycloak + FastAPI SAML configuration.
-# Run AFTER both port-forwards are active:
+# Configures Keycloak realm + SAML client, syncs IDP metadata to FastAPI.
+# Prerequisites: both port-forwards must be active before running.
 #   kubectl port-forward -n keycloak svc/keycloak 8080:8080
 #   kubectl port-forward -n fastapi-saml svc/fastapi-saml 8000:8000
 
-set -e
+set -euo pipefail
 
 KEYCLOAK_URL="http://localhost:8080"
 FASTAPI_URL="http://localhost:8000"
@@ -13,136 +13,149 @@ REALM="saml-demo"
 ADMIN_USER="admin"
 ADMIN_PASS="admin"
 
-# ── colours ──────────────────────────────────────────────────────────────────
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
-warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
-die()     { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; BOLD='\033[1m'; NC='\033[0m'
+info()  { echo -e "${GREEN}[INFO]${NC}  $*"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; }
+die()   { echo -e "${RED}[FAIL]${NC}  $*" >&2; exit 1; }
+step()  { echo -e "\n${BOLD}── $* ──${NC}"; }
 
-# ── 1. wait for Keycloak ──────────────────────────────────────────────────────
-info "Waiting for Keycloak to be ready..."
-for i in $(seq 1 30); do
-  if curl -sf "$KEYCLOAK_URL/realms/master" >/dev/null 2>&1; then
-    info "Keycloak is ready."
-    break
-  fi
-  [ "$i" -eq 30 ] && die "Keycloak did not become ready in time."
-  sleep 5
+# ── 1. Wait for Keycloak ──────────────────────────────────────────────────────
+step "1/8  Waiting for Keycloak"
+for i in $(seq 1 36); do
+  curl -sf "$KEYCLOAK_URL/realms/master" >/dev/null 2>&1 && { info "Keycloak ready."; break; }
+  [ "$i" -eq 36 ] && die "Keycloak not ready after 3 minutes."
+  echo -n "." ; sleep 5
 done
 
-# ── 2. get admin token ────────────────────────────────────────────────────────
-info "Obtaining Keycloak admin token..."
+# ── 2. Admin token ────────────────────────────────────────────────────────────
+step "2/8  Obtaining admin token"
 TOKEN=$(curl -sf -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
-  -d "client_id=admin-cli" \
-  -d "username=$ADMIN_USER" \
-  -d "password=$ADMIN_PASS" \
-  -d "grant_type=password" | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-[ -z "$TOKEN" ] && die "Failed to get admin token."
+  -d "client_id=admin-cli&username=$ADMIN_USER&password=$ADMIN_PASS&grant_type=password" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+[ -z "$TOKEN" ] && die "Could not get admin token."
 info "Token obtained."
 
-# ── 3. create realm ───────────────────────────────────────────────────────────
-info "Creating realm '$REALM'..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$KEYCLOAK_URL/admin/realms" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
+# ── 3. Create realm ───────────────────────────────────────────────────────────
+step "3/8  Creating realm '$REALM'"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$KEYCLOAK_URL/admin/realms" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d "{\"realm\":\"$REALM\",\"enabled\":true,\"displayName\":\"SAML Demo\"}")
+[ "$CODE" = "201" ] && info "Realm created." || \
+[ "$CODE" = "409" ] && warn "Realm already exists — continuing." || \
+  die "Create realm failed (HTTP $CODE)."
 
-if [ "$HTTP_CODE" = "201" ]; then
-  info "Realm '$REALM' created."
-elif [ "$HTTP_CODE" = "409" ]; then
-  warn "Realm '$REALM' already exists — continuing."
-else
-  die "Failed to create realm (HTTP $HTTP_CODE)."
-fi
-
-# ── 4. fetch SP metadata from FastAPI ─────────────────────────────────────────
-info "Waiting for FastAPI /metadata endpoint..."
+# ── 4. Fetch SP metadata from FastAPI ─────────────────────────────────────────
+step "4/8  Fetching SP metadata from FastAPI"
 for i in $(seq 1 20); do
-  if curl -sf "$FASTAPI_URL/metadata" >/dev/null 2>&1; then
-    info "FastAPI is ready."
-    break
-  fi
-  [ "$i" -eq 20 ] && die "FastAPI did not become ready."
-  sleep 3
+  SP_META=$(curl -sf "$FASTAPI_URL/metadata" 2>/dev/null) && break
+  [ "$i" -eq 20 ] && die "FastAPI /metadata not available."
+  echo -n "." ; sleep 3
 done
+echo "$SP_META" > /tmp/sp_metadata.xml
+info "SP metadata fetched ($(echo "$SP_META" | wc -c) bytes)."
 
-info "Downloading SP metadata from FastAPI..."
-SP_METADATA=$(curl -sf "$FASTAPI_URL/metadata")
-[ -z "$SP_METADATA" ] && die "Failed to fetch SP metadata."
-
-# ── 5. register FastAPI as a SAML client from SP metadata ────────────────────
-info "Registering FastAPI as SAML client in Keycloak (via SP metadata)..."
-
-# Get initial access token for client registration
-REG_TOKEN=$(curl -sf -X POST "$KEYCLOAK_URL/admin/realms/$REALM/clients-registrations/initial-access" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"count":1,"expiration":3600}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])" 2>/dev/null || echo "")
-
-# Use SAML entity-descriptor import (most direct path — mirrors "Import from file" in Keycloak UI)
-HTTP_CODE=$(curl -s -o /tmp/kc_client_resp.json -w "%{http_code}" \
-  -X POST "$KEYCLOAK_URL/admin/realms/$REALM/clients-registrations/saml2-entity-descriptor" \
+# ── 5. Convert SP metadata → Keycloak client JSON ────────────────────────────
+step "5/8  Converting SP metadata to Keycloak client representation"
+CLIENT_JSON=$(curl -sf -X POST \
+  "$KEYCLOAK_URL/admin/realms/$REALM/client-description-converter" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/xml" \
-  --data-raw "$SP_METADATA")
+  --data-raw "$SP_META")
+[ -z "$CLIENT_JSON" ] && die "client-description-converter returned empty response."
+info "Conversion successful."
 
-if [ "$HTTP_CODE" = "201" ] || [ "$HTTP_CODE" = "200" ]; then
-  CLIENT_ID=$(python3 -c "import sys,json; d=json.load(open('/tmp/kc_client_resp.json')); print(d.get('clientId',''))" 2>/dev/null || echo "")
-  info "SAML client registered. Client ID: $CLIENT_ID"
-elif [ "$HTTP_CODE" = "409" ]; then
+# ── 6. Register SAML client ───────────────────────────────────────────────────
+step "6/8  Registering FastAPI as SAML client"
+CODE=$(curl -s -o /tmp/kc_create_client.json -w "%{http_code}" \
+  -X POST "$KEYCLOAK_URL/admin/realms/$REALM/clients" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d "$CLIENT_JSON")
+
+if [ "$CODE" = "201" ]; then
+  info "SAML client created."
+elif [ "$CODE" = "409" ]; then
   warn "Client already exists — continuing."
 else
-  warn "Client registration returned HTTP $HTTP_CODE — check /tmp/kc_client_resp.json"
-  cat /tmp/kc_client_resp.json
+  warn "HTTP $CODE when creating client:"
+  cat /tmp/kc_create_client.json
 fi
 
-# ── 6. create a test user ─────────────────────────────────────────────────────
-info "Creating test user 'testuser@example.com'..."
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST "$KEYCLOAK_URL/admin/realms/$REALM/users" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
+# ── 7. Create test user ───────────────────────────────────────────────────────
+step "7/8  Creating test user"
+CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+  -X POST "$KEYCLOAK_URL/admin/realms/$REALM/users" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{
-    "username": "testuser",
-    "email": "testuser@example.com",
-    "firstName": "Test",
-    "lastName": "User",
-    "enabled": true,
-    "emailVerified": true,
-    "credentials": [{"type":"password","value":"Test@1234","temporary":false}]
+    "username":"testuser","email":"testuser@example.com",
+    "firstName":"Test","lastName":"User",
+    "enabled":true,"emailVerified":true,
+    "credentials":[{"type":"password","value":"Test@1234","temporary":false}]
   }')
+[ "$CODE" = "201" ] && info "Test user created  →  testuser / Test@1234" || \
+[ "$CODE" = "409" ] && warn "Test user already exists." || \
+  warn "Create user returned HTTP $CODE."
 
-if [ "$HTTP_CODE" = "201" ]; then
-  info "Test user created — username: testuser / password: Test@1234"
-elif [ "$HTTP_CODE" = "409" ]; then
-  warn "Test user already exists."
+# ── 7b. Disable client-signature requirement ─────────────────────────────────
+# client-description-converter sets saml.client.signature=true when the SP
+# metadata contains a signing cert. Since we send unsigned AuthnRequests, we
+# must turn this off or Keycloak returns "Invalid requester".
+CLIENT_UUID=$(curl -sf \
+  "$KEYCLOAK_URL/admin/realms/$REALM/clients?clientId=http://localhost:8000/metadata" \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['id'] if d else '')" 2>/dev/null || echo "")
+
+if [ -n "$CLIENT_UUID" ]; then
+  curl -sf -X PUT "$KEYCLOAK_URL/admin/realms/$REALM/clients/$CLIENT_UUID" \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+    -d '{"attributes":{"saml.client.signature":"false","saml.server.signature":"true"}}' \
+    >/dev/null
+  info "Disabled client-signature requirement on SAML client."
+else
+  warn "Could not find client UUID to patch — skipping signature patch."
 fi
 
-# ── 7. download IDP metadata from Keycloak ────────────────────────────────────
-info "Downloading IDP metadata from Keycloak..."
-curl -sf "$KEYCLOAK_URL/realms/$REALM/protocol/saml/descriptor" > /tmp/idp_metadata.xml
-[ ! -s /tmp/idp_metadata.xml ] && die "IDP metadata download failed."
-info "IDP metadata saved to /tmp/idp_metadata.xml"
+# Fix role_list mapper to emit a single <Attribute> with multiple values instead
+# of one <Attribute> per role — python3-saml rejects duplicate attribute names.
+ROLE_SCOPE_ID=$(curl -sf "$KEYCLOAK_URL/admin/realms/$REALM/client-scopes" \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import sys,json; ids=[s['id'] for s in json.load(sys.stdin) if s['name']=='role_list']; print(ids[0] if ids else '')")
+ROLE_MAPPER_ID=$(curl -sf "$KEYCLOAK_URL/admin/realms/$REALM/client-scopes/$ROLE_SCOPE_ID/protocol-mappers/models" \
+  -H "Authorization: Bearer $TOKEN" \
+  | python3 -c "import sys,json; ms=json.load(sys.stdin); ids=[m['id'] for m in ms if m['name']=='role list']; print(ids[0] if ids else '')")
+if [ -n "$ROLE_MAPPER_ID" ]; then
+  curl -sf -X PUT \
+    "$KEYCLOAK_URL/admin/realms/$REALM/client-scopes/$ROLE_SCOPE_ID/protocol-mappers/models/$ROLE_MAPPER_ID" \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+    -d "{\"id\":\"$ROLE_MAPPER_ID\",\"name\":\"role list\",\"protocol\":\"saml\",\"protocolMapper\":\"saml-role-list-mapper\",\"consentRequired\":false,\"config\":{\"single\":\"true\",\"attribute.nameformat\":\"Basic\",\"attribute.name\":\"Role\"}}" \
+    >/dev/null
+  info "role_list mapper: single=true (all roles in one Attribute element)."
+fi
 
-# ── 8. update k8s ConfigMap with IDP metadata ────────────────────────────────
-info "Updating Kubernetes ConfigMap 'keycloak-idp-metadata'..."
+# ── 8. Download IDP metadata and push to k8s ─────────────────────────────────
+step "8/8  Syncing IDP metadata → k8s ConfigMap"
+IDP_META_URL="$KEYCLOAK_URL/realms/$REALM/protocol/saml/descriptor"
+curl -sf "$IDP_META_URL" > /tmp/idp_metadata.xml
+[ ! -s /tmp/idp_metadata.xml ] && die "IDP metadata download failed."
+info "Downloaded IDP metadata from $IDP_META_URL"
+
 kubectl create configmap keycloak-idp-metadata \
   --from-file=idp_metadata.xml=/tmp/idp_metadata.xml \
   -n fastapi-saml \
-  --dry-run=client -o yaml | kubectl apply -f -
+  --dry-run=client -o yaml | kubectl --context kind-agentregistry apply -f -
 
-# ── 9. restart FastAPI to pick up new IDP metadata ───────────────────────────
-info "Restarting FastAPI deployment..."
-kubectl rollout restart deployment/fastapi-saml -n fastapi-saml
-kubectl rollout status deployment/fastapi-saml -n fastapi-saml --timeout=90s
+info "ConfigMap updated. Restarting FastAPI..."
+kubectl --context kind-agentregistry rollout restart deployment/fastapi-saml -n fastapi-saml
+kubectl --context kind-agentregistry rollout status deployment/fastapi-saml -n fastapi-saml --timeout=90s
 
 echo ""
-echo -e "${GREEN}============================================================${NC}"
-echo -e "${GREEN} Setup complete!${NC}"
-echo -e "${GREEN}============================================================${NC}"
+echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}${BOLD}║  Setup complete!                                         ║${NC}"
+echo -e "${GREEN}${BOLD}╠══════════════════════════════════════════════════════════╣${NC}"
+echo -e "${GREEN}${BOLD}║${NC}  Keycloak admin : http://localhost:8080/admin            ${GREEN}${BOLD}║${NC}"
+echo -e "${GREEN}${BOLD}║${NC}  Realm          : $REALM                              ${GREEN}${BOLD}║${NC}"
+echo -e "${GREEN}${BOLD}║${NC}  FastAPI app    : http://localhost:8000                  ${GREEN}${BOLD}║${NC}"
+echo -e "${GREEN}${BOLD}║${NC}  Test login     : testuser / Test@1234                   ${GREEN}${BOLD}║${NC}"
+echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo "  Keycloak Admin:  $KEYCLOAK_URL/admin  (admin / admin)"
-echo "  Realm:           $REALM"
-echo "  FastAPI App:     $FASTAPI_URL"
-echo "  Test login:      testuser / Test@1234"
-echo ""
-echo "Keep both port-forwards running, then open: $FASTAPI_URL"
+echo "NOTE: Re-run the FastAPI port-forward after pod restart:"
+echo "  kubectl port-forward -n fastapi-saml svc/fastapi-saml 8000:8000"

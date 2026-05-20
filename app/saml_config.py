@@ -1,6 +1,11 @@
 import os
 from pathlib import Path
+from dotenv import load_dotenv, find_dotenv
 from onelogin.saml2.idp_metadata_parser import OneLogin_Saml2_IdPMetadataParser
+
+# Searches up the directory tree — finds .env in project root whether running
+# locally with uvicorn or inside the Docker container.
+load_dotenv(find_dotenv(usecwd=True))
 
 BASE_DIR = Path(__file__).parent
 SAML_DIR = BASE_DIR / "saml"
