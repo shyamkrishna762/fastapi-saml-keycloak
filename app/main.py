@@ -1,4 +1,5 @@
 import secrets
+from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -11,7 +12,8 @@ from onelogin.saml2.settings import OneLogin_Saml2_Settings
 from saml_config import get_saml_settings, get_sp_only_settings, SAML_ROLE_ATTRIBUTE, map_roles
 
 app = FastAPI(title="FastAPI SAML SSO")
-templates = Jinja2Templates(directory="templates")
+# Absolute path so uvicorn can be launched from any working directory
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 # In-memory session store — use Redis/DB in production
 _sessions: dict[str, dict] = {}

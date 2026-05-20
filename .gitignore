@@ -10,3 +10,5 @@ venv/
 app/saml/certs/
 *.tar
 .vscode/
+# real IDP metadata is environment-specific — fetched by dev_setup.sh / setup_keycloak.sh
+# the placeholder file (app/saml/idp_metadata.xml) IS committed
