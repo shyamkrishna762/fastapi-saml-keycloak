@@ -24,7 +24,7 @@ setup:
 install:
 	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PYTHON) -m pip install --quiet ".[dev]"
 
-run: app/saml/certs/sp.crt app/saml/idp_metadata.xml
+run: app/saml/idp_metadata.xml
 	@echo "Starting FastAPI on http://localhost:$(PORT) ..."
 	$(UVICORN) main:app \
 	  --app-dir $(APP_DIR) \
@@ -46,9 +46,6 @@ pf-fastapi:
 # Guard: remind user to run setup if venv is missing
 .venv/bin/activate:
 	@echo "Run 'make setup' first." && exit 1
-
-app/saml/certs/sp.crt:
-	@echo "SP certs missing — run 'make setup' first." && exit 1
 
 app/saml/idp_metadata.xml:
 	@grep -q "EntityDescriptor" app/saml/idp_metadata.xml 2>/dev/null || \

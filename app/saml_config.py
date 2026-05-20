@@ -9,7 +9,6 @@ load_dotenv(find_dotenv(usecwd=True))
 
 BASE_DIR = Path(__file__).parent
 SAML_DIR = BASE_DIR / "saml"
-CERTS_DIR = SAML_DIR / "certs"
 IDP_METADATA_FILE = SAML_DIR / "idp_metadata.xml"
 
 SP_ENTITY_ID = os.getenv("SP_ENTITY_ID", "http://localhost:8000/metadata")
@@ -62,14 +61,6 @@ def map_roles(raw_roles: list[str]) -> list[str]:
     return mapped
 
 
-def _load_cert(path: Path) -> str:
-    if not path.exists():
-        return ""
-    content = path.read_text()
-    lines = [line for line in content.splitlines() if line and not line.startswith("---")]
-    return "".join(lines)
-
-
 def _sp_config() -> dict:
     return {
         "entityId": SP_ENTITY_ID,
@@ -82,8 +73,6 @@ def _sp_config() -> dict:
             "binding": "urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect",
         },
         "NameIDFormat": "urn:oasis:names:tc:SAML:1.1:nameid-format:unspecified",
-        "x509cert": _load_cert(CERTS_DIR / "sp.crt"),
-        "privateKey": _load_cert(CERTS_DIR / "sp.key"),
     }
 
 
@@ -103,16 +92,15 @@ def _idp_config() -> dict:
 
 
 def _security_settings() -> dict:
-    """Single source of truth for security flags — used by both full and SP-only settings."""
     return {
-        "nameIdEncrypted": True,       # SP requests encrypted NameID; Keycloak encrypts with sp.crt
-        "authnRequestsSigned": True,   # SP signs AuthnRequest with sp.key; Keycloak verifies with sp.crt
+        "nameIdEncrypted": False,
+        "authnRequestsSigned": False,
         "logoutRequestSigned": False,
         "logoutResponseSigned": False,
         "signMetadata": False,
         "wantMessagesSigned": False,
-        "wantAssertionsSigned": True,  # SP requires signed assertion; verified via idp_metadata.xml cert
-        "wantNameIdEncrypted": True,   # encryption KeyDescriptor added to SP metadata; response NameID must be encrypted
+        "wantAssertionsSigned": False,
+        "wantNameIdEncrypted": False,
         "wantAssertionsEncrypted": False,
     }
 

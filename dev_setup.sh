@@ -10,14 +10,14 @@ die()   { echo -e "${RED}[FAIL]${NC}  $*" >&2; exit 1; }
 step()  { echo -e "\n${BOLD}── $* ──${NC}"; }
 
 # ── 1. System dependencies (macOS / Homebrew) ─────────────────────────────────
-step "1/5  System dependencies"
+step "1/3  System dependencies"
 if command -v brew >/dev/null 2>&1; then
-  for pkg in libxml2 libxmlsec1 pkg-config openssl; do
+  for pkg in libxml2 libxmlsec1 pkg-config; do
     brew list "$pkg" &>/dev/null && info "$pkg already installed." || \
       { info "Installing $pkg..."; brew install "$pkg"; }
   done
 else
-  warn "Homebrew not found. Install libxml2, libxmlsec1, pkg-config, openssl manually."
+  warn "Homebrew not found. Install libxml2, libxmlsec1, pkg-config manually."
 fi
 
 # Ensure pkg-config can find Homebrew-installed libs (Apple Silicon + Intel)
@@ -25,7 +25,7 @@ export PKG_CONFIG_PATH
 PKG_CONFIG_PATH="$(brew --prefix libxml2 2>/dev/null)/lib/pkgconfig:$(brew --prefix libxmlsec1 2>/dev/null)/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 
 # ── 2. Python virtual environment ─────────────────────────────────────────────
-step "2/5  Python virtual environment"
+step "2/3  Python virtual environment"
 if [ ! -d ".venv" ]; then
   python3 -m venv .venv
   info ".venv created."
@@ -37,21 +37,8 @@ info "Installing Python dependencies..."
 PKG_CONFIG_PATH="$PKG_CONFIG_PATH" .venv/bin/pip install --quiet ".[dev]"
 info "Dependencies installed."
 
-# ── 3. SP certificates ────────────────────────────────────────────────────────
-step "3/5  SP certificates"
-mkdir -p app/saml/certs
-if [ ! -f app/saml/certs/sp.crt ]; then
-  openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-    -keyout app/saml/certs/sp.key \
-    -out app/saml/certs/sp.crt \
-    -subj "/CN=fastapi-saml-sp/O=Demo/C=US" 2>/dev/null
-  info "SP certificate generated at app/saml/certs/sp.crt"
-else
-  info "SP certificates already exist."
-fi
-
-# ── 4. IDP metadata ───────────────────────────────────────────────────────────
-step "4/5  IDP metadata"
+# ── 3. IDP metadata ───────────────────────────────────────────────────────────
+step "3/3  IDP metadata"
 IDP_URL="http://localhost:8080/realms/saml-demo/protocol/saml/descriptor"
 if curl -sf "$IDP_URL" > /tmp/idp_meta_check.xml 2>/dev/null && \
    grep -q "EntityDescriptor" /tmp/idp_meta_check.xml; then
@@ -67,8 +54,8 @@ else
   fi
 fi
 
-# ── 5. Summary ────────────────────────────────────────────────────────────────
-step "5/5  Done"
+# ── Done ──────────────────────────────────────────────────────────────────────
+step "Done"
 echo ""
 echo -e "${GREEN}${BOLD}Setup complete. To start the app:${NC}"
 echo ""
