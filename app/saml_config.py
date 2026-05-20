@@ -102,27 +102,35 @@ def _idp_config() -> dict:
     return parsed.get("idp", {})
 
 
+def _security_settings() -> dict:
+    """Single source of truth for security flags — used by both full and SP-only settings."""
+    return {
+        "nameIdEncrypted": True,       # SP requests encrypted NameID; Keycloak encrypts with sp.crt
+        "authnRequestsSigned": True,   # SP signs AuthnRequest with sp.key; Keycloak verifies with sp.crt
+        "logoutRequestSigned": False,
+        "logoutResponseSigned": False,
+        "signMetadata": False,
+        "wantMessagesSigned": False,
+        "wantAssertionsSigned": True,  # SP requires signed assertion; verified via idp_metadata.xml cert
+        "wantNameIdEncrypted": True,   # encryption KeyDescriptor added to SP metadata; response NameID must be encrypted
+        "wantAssertionsEncrypted": False,
+    }
+
+
 def get_saml_settings() -> dict:
     return {
         "strict": False,
         "debug": True,
         "sp": _sp_config(),
         "idp": _idp_config(),
-        "security": {
-            "nameIdEncrypted": False,
-            "authnRequestsSigned": False,
-            "logoutRequestSigned": False,
-            "logoutResponseSigned": False,
-            "signMetadata": False,
-            "wantMessagesSigned": False,
-            "wantAssertionsSigned": False,
-            "wantNameIdEncrypted": False,
-        },
+        "security": _security_settings(),
     }
 
 
 def get_sp_only_settings() -> dict:
-    """Used by /metadata endpoint — IDP is a stub so metadata can be served before Keycloak config."""
+    """Used by /metadata endpoint — IDP is a stub so metadata can be served before Keycloak config.
+    Security settings are shared so the metadata reflects the real SP capabilities
+    (AuthnRequestsSigned, WantAssertionsSigned, encryption KeyDescriptor)."""
     return {
         "strict": False,
         "debug": True,
@@ -135,4 +143,5 @@ def get_sp_only_settings() -> dict:
             },
             "x509cert": "",
         },
+        "security": _security_settings(),
     }
