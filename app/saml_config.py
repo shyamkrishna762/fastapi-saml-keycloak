@@ -16,6 +16,51 @@ SP_ENTITY_ID = os.getenv("SP_ENTITY_ID", "http://localhost:8000/metadata")
 SP_ACS_URL = os.getenv("SP_ACS_URL", "http://localhost:8000/acs")
 SP_SLS_URL = os.getenv("SP_SLS_URL", "http://localhost:8000/sls")
 
+# Role attribute name as it appears in the SAML assertion.
+# Keycloak default: "Role"
+# Azure AD / Entra: "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
+# Okta / Auth0: "roles" or "groups"
+SAML_ROLE_ATTRIBUTE = os.getenv("SAML_ROLE_ATTRIBUTE", "Role")
+
+# Optional role-value mapping: pipe-separated idp_role:app_role pairs.
+# Example: "default-roles-saml-demo:user|uma_authorization:admin"
+# If empty → all IdP roles are stored as-is (passthrough).
+# If set   → only listed roles are kept; unlisted roles are dropped.
+# Using "|" as pair separator so role names that contain commas (e.g. LDAP DNs) are safe.
+_ROLE_MAP_RAW = os.getenv("SAML_ROLE_MAP", "").strip()
+
+
+def get_role_map() -> dict[str, str]:
+    if not _ROLE_MAP_RAW:
+        return {}
+    result: dict[str, str] = {}
+    for pair in _ROLE_MAP_RAW.split("|"):
+        pair = pair.strip()
+        if ":" in pair:
+            idp_role, app_role = pair.split(":", 1)
+            result[idp_role.strip()] = app_role.strip()
+    return result
+
+
+def map_roles(raw_roles: list[str]) -> list[str]:
+    """
+    Map IdP role values to application roles.
+    - No SAML_ROLE_MAP set  → return raw_roles unchanged.
+    - SAML_ROLE_MAP set     → keep only roles present in the map, return their mapped values.
+      Deduplicates so two IdP roles that map to the same app role appear once.
+    """
+    role_map = get_role_map()
+    if not role_map:
+        return list(raw_roles)
+    seen: set[str] = set()
+    mapped: list[str] = []
+    for role in raw_roles:
+        app_role = role_map.get(role)
+        if app_role and app_role not in seen:
+            mapped.append(app_role)
+            seen.add(app_role)
+    return mapped
+
 
 def _load_cert(path: Path) -> str:
     if not path.exists():

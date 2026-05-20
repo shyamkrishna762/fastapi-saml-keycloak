@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from onelogin.saml2.auth import OneLogin_Saml2_Auth
 from onelogin.saml2.settings import OneLogin_Saml2_Settings
 
-from saml_config import get_saml_settings, get_sp_only_settings
+from saml_config import get_saml_settings, get_sp_only_settings, SAML_ROLE_ATTRIBUTE, map_roles
 
 app = FastAPI(title="FastAPI SAML SSO")
 templates = Jinja2Templates(directory="templates")
@@ -91,10 +91,16 @@ async def acs(request: Request):
     if not auth.is_authenticated():
         raise HTTPException(status_code=401, detail="Authentication failed")
 
+    attributes = dict(auth.get_attributes())
+    raw_roles: list[str] = attributes.get(SAML_ROLE_ATTRIBUTE, [])
+    mapped_roles = map_roles(raw_roles)
+
     sid = secrets.token_urlsafe(32)
     _sessions[sid] = {
         "nameid": auth.get_nameid(),
-        "attributes": dict(auth.get_attributes()),
+        "attributes": attributes,
+        "roles": mapped_roles,
+        "raw_roles": raw_roles,
         "session_index": auth.get_session_index(),
     }
 
@@ -115,6 +121,9 @@ async def profile(request: Request):
         "request": request,
         "nameid": session["nameid"],
         "attributes": session["attributes"],
+        "roles": session.get("roles", []),
+        "raw_roles": session.get("raw_roles", []),
+        "role_attribute": SAML_ROLE_ATTRIBUTE,
     })
 
 

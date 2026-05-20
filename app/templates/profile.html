@@ -4,7 +4,7 @@
 {% block content %}
 <div class="card">
   <h1>User Profile</h1>
-  <p>Authenticated via Keycloak SAML. Session attributes returned in the SAML assertion are shown below.</p>
+  <p>Authenticated via Keycloak SAML.</p>
 
   <h2 class="mt-4">Identity</h2>
   <table>
@@ -12,21 +12,51 @@
     <tr><td>Name ID</td><td><span class="badge">{{ nameid }}</span></td></tr>
   </table>
 
-  {% if attributes %}
-  <h2 class="mt-4">SAML Attributes</h2>
-  <table>
-    <thead><tr><th>Attribute</th><th>Value(s)</th></tr></thead>
-    <tbody>
-      {% for key, values in attributes.items() %}
-      <tr>
-        <td>{{ key }}</td>
-        <td>{{ values | join(", ") }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <h2 class="mt-4">Application Roles
+    <span style="font-size:.75rem;font-weight:400;color:#718096;margin-left:.5rem;">
+      (mapped from <code>{{ role_attribute }}</code> via <code>SAML_ROLE_MAP</code>)
+    </span>
+  </h2>
+  {% if roles %}
+  <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem;">
+    {% for role in roles %}
+    <span style="background:#c6f6d5;color:#276749;border-radius:4px;padding:.25rem .7rem;font-size:.85rem;font-weight:600;">{{ role }}</span>
+    {% endfor %}
+  </div>
   {% else %}
-  <p class="mt-4" style="color:#a0aec0;font-style:italic;">No additional attributes were returned in the SAML assertion. Add attribute mappers in Keycloak to include email, roles, etc.</p>
+  <p style="color:#a0aec0;font-style:italic;margin-top:.5rem;">
+    No roles mapped. Set <code>SAML_ROLE_MAP</code> in <code>.env</code> to map IdP roles to app roles.
+  </p>
+  {% endif %}
+
+  <details style="margin-top:1.5rem;">
+    <summary style="cursor:pointer;color:#4a5568;font-weight:600;font-size:.9rem;">
+      Raw IdP roles ({{ raw_roles | length }}) from <code>{{ role_attribute }}</code>
+    </summary>
+    <div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem;">
+      {% for role in raw_roles %}
+      <span style="background:#ebf8ff;color:#2b6cb0;border-radius:4px;padding:.2rem .6rem;font-size:.8rem;">{{ role }}</span>
+      {% endfor %}
+    </div>
+  </details>
+
+  {% if attributes %}
+  <details style="margin-top:1rem;">
+    <summary style="cursor:pointer;color:#4a5568;font-weight:600;font-size:.9rem;">
+      All SAML attributes ({{ attributes | length }})
+    </summary>
+    <table style="margin-top:.5rem;">
+      <thead><tr><th>Attribute</th><th>Value(s)</th></tr></thead>
+      <tbody>
+        {% for key, values in attributes.items() %}
+        <tr>
+          <td style="font-family:monospace;font-size:.8rem;">{{ key }}</td>
+          <td>{{ values | join(", ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
   {% endif %}
 
   <div class="flex mt-4">
