@@ -34,7 +34,7 @@ else
 fi
 
 info "Installing Python dependencies..."
-PKG_CONFIG_PATH="$PKG_CONFIG_PATH" .venv/bin/pip install --quiet -r requirements.txt
+PKG_CONFIG_PATH="$PKG_CONFIG_PATH" .venv/bin/pip install --quiet ".[dev]"
 info "Dependencies installed."
 
 # ── 3. SP certificates ────────────────────────────────────────────────────────

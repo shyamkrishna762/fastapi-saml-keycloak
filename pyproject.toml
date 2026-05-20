@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastapi-saml"
+version = "0.1.0"
+description = "FastAPI SAML 2.0 SSO with Keycloak as IDP, deployed on Kubernetes"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.104.1",
+    "uvicorn[standard]==0.24.0",
+    "python3-saml==1.16.0",
+    "jinja2==3.1.2",
+    "python-multipart==0.0.6",
+    "python-dotenv==1.0.0",
+    "beautifulsoup4==4.12.3",
+]
+
+[project.optional-dependencies]
+# pip install ".[dev]"
+dev = [
+    "requests>=2.31",
+]
+
+[tool.setuptools]
+# Web app — no Python package to install, just the dependencies above
+py-modules = []

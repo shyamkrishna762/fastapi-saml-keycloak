@@ -20,6 +20,10 @@ help:
 setup:
 	bash dev_setup.sh
 
+# Re-install deps after editing pyproject.toml
+install:
+	PKG_CONFIG_PATH=$(PKG_CONFIG_PATH) $(PYTHON) -m pip install --quiet ".[dev]"
+
 run: app/saml/certs/sp.crt app/saml/idp_metadata.xml
 	@echo "Starting FastAPI on http://localhost:$(PORT) ..."
 	$(UVICORN) main:app \

@@ -10,8 +10,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy only pyproject.toml first so the dependency layer is cached separately
+# from the application code. Re-runs only when pyproject.toml changes.
+COPY pyproject.toml .
+RUN pip install --no-cache-dir .
 
 COPY app/ .
 
